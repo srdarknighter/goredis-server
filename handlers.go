@@ -69,6 +69,10 @@ func set(v *Value, state *AppState) *Value {
 		}
 	}
 
+	if len(state.conf.rdb) > 0 {
+		IncrRDBTrackers()
+	}
+
 	DB.mu.Unlock()
 
 	return &Value{typ: STRING, str: "OK"}
