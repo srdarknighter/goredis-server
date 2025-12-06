@@ -18,7 +18,7 @@ func NewWriter(w io.Writer) *Writer {
 func (w *Writer) Deserialize(v *Value) (reply string) {
 	switch v.typ {
 	case ARRAY:
-		reply = fmt.Sprintf("*%d", len(v.array))
+		reply = fmt.Sprintf("*%d\r\n", len(v.array))
 		for _, sub := range v.array {
 			reply += w.Deserialize(&sub) // recursive array parsing for resp conversion
 		}

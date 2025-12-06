@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"log"
 	"strconv"
 )
 
@@ -37,21 +38,25 @@ func (v *Value) readArray(reader io.Reader) error {
 	}
 
 	for range arrLen {
-		bulk := v.readBulk(reader)
+		bulk, err := v.readBulk(reader)
+		if err != nil {
+			log.Println(err)
+			break
+		}
 		v.array = append(v.array, bulk)
 	}
 
 	return nil
 }
 
-func (v *Value) readBulk(reader io.Reader) Value {
+func (v *Value) readBulk(reader io.Reader) (Value, error) {
 	buf := make([]byte, 4)
 	reader.Read(buf)
 
 	n, err := strconv.Atoi(string(buf[1]))
 	if err != nil {
 		fmt.Println(err)
-		return Value{}
+		return Value{}, err
 	}
 
 	bulkBuf := make([]byte, n+2)
@@ -59,5 +64,5 @@ func (v *Value) readBulk(reader io.Reader) Value {
 
 	bulk := string(bulkBuf[:n])
 
-	return Value{typ: BULK, bulk: bulk}
+	return Value{typ: BULK, bulk: bulk}, nil
 }
