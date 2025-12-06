@@ -12,3 +12,17 @@ $2
 id
 $1
 1
+*3
+$3
+SET
+$6
+number
+$1
+3
+*3
+$3
+SET
+$4
+name
+$7
+anirudh

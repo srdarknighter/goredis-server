@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -31,19 +32,36 @@ func main() {
 	defer l.Close()
 	log.Println("listening on :6379")
 
-	conn, err := l.Accept()
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	defer conn.Close()
-	log.Println("connection accepted")
+	var wg sync.WaitGroup // wait group to prevent pre-mature closing of main loop
 
+	for { // infinite loop to accept connections
+		conn, err := l.Accept()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		log.Println("connection accepted")
+
+		wg.Add(1) // incrementing the start of a routine
+		go func() {
+			handleConn(conn, state)
+			wg.Done()
+		}()
+	}
+	wg.Wait() // won't matter since infinite loop
+}
+
+func handleConn(conn net.Conn, state *AppState) {
+	log.Println("accepted new connections: ", conn.LocalAddr().String())
 	for {
 		v := Value{typ: ARRAY}
-		v.readArray(conn)
+		if err := v.readArray(conn); err != nil {
+			log.Println(err)
+			break
+		}
 		handle(conn, &v, state)
 	}
+	log.Println("connection closed: ", conn.LocalAddr().String())
 }
 
 type AppState struct { // defines the app state with conf + aof rules

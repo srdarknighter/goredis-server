@@ -10,11 +10,12 @@ import (
 type ValueType string
 
 const (
-	ARRAY  ValueType = "*"
-	BULK   ValueType = "$"
-	STRING ValueType = "+"
-	ERROR  ValueType = "-"
-	NULL   ValueType = ""
+	ARRAY   ValueType = "*"
+	BULK    ValueType = "$"
+	STRING  ValueType = "+"
+	INTEGER ValueType = ":"
+	ERROR   ValueType = "-"
+	NULL    ValueType = ""
 )
 
 type Value struct {
@@ -22,6 +23,7 @@ type Value struct {
 	bulk  string
 	err   string
 	str   string
+	num   int
 	array []Value
 }
 

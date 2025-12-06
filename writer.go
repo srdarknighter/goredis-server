@@ -22,6 +22,8 @@ func (w *Writer) Deserialize(v *Value) (reply string) {
 		for _, sub := range v.array {
 			reply += w.Deserialize(&sub) // recursive array parsing for resp conversion
 		}
+	case INTEGER:
+		reply = fmt.Sprintf("%s%d\r\n", v.typ, v.num)
 	case STRING:
 		reply = fmt.Sprintf("%s%s\r\n", v.typ, v.str)
 	case BULK:
