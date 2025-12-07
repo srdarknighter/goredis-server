@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"log"
 	"maps"
-	"net"
 	"path/filepath"
 )
 
-type Handler func(*Value, *AppState) *Value // type defn for the map
+type Handler func(*Client, *Value, *AppState) *Value // type defn for the map
 
 var Handlers = map[string]Handler{
 	"COMMAND": command,
@@ -21,28 +20,46 @@ var Handlers = map[string]Handler{
 	"BGSAVE":  bgsave,
 	"DBSIZE":  dbsize,
 	"FLUSHDB": flushdb,
+	"AUTH":    auth,
 } // map to store the commands and their implementations
 
-func handle(conn net.Conn, v *Value, state *AppState) {
+var SafeCmds = []string{
+	"COMMAND",
+	"AUTH",
+}
+
+func handle(c *Client, v *Value, state *AppState) {
 	cmd := v.array[0].bulk       // it's a command like GET, SET, etc
 	handler, ok := Handlers[cmd] // handler is the functional implementation of cmd in a map, stores cmd and its functional implementation
+	w := NewWriter(c.conn)       // creating a new writer with conn object
+
+	if !ok {
+		w.Write(&Value{typ: ERROR, err: "ERR invalid command"})
+		w.Flush()
+		return
+	}
+
+	if state.conf.requirepass && !c.authenticated && !contains(SafeCmds, cmd) {
+		w.Write(&Value{typ: ERROR, err: "NOAUTH authentication required"})
+		w.Flush()
+		return
+	}
 
 	if !ok {
 		fmt.Println("invalid command: ", cmd)
 		return
 	}
 
-	reply := handler(v, state) // calling the function of cmd with v as argument
-	w := NewWriter(conn)       // creating a new writer with conn object
-	w.Write(reply)             // converting reply to resp protocol
-	w.Flush()                  // flushing to the CLI
+	reply := handler(c, v, state) // calling the function of cmd with v as argument
+	w.Write(reply)                // converting reply to resp protocol
+	w.Flush()                     // flushing to the CLI
 }
 
-func command(v *Value, state *AppState) *Value {
+func command(c *Client, v *Value, state *AppState) *Value {
 	return &Value{typ: STRING, str: "OK"}
 }
 
-func get(v *Value, state *AppState) *Value {
+func get(c *Client, v *Value, state *AppState) *Value {
 	args := v.array[1:]
 	if len(args) != 1 {
 		return &Value{typ: ERROR, err: "ERR invalid number of arguments for 'GET' function"}
@@ -60,7 +77,7 @@ func get(v *Value, state *AppState) *Value {
 	return &Value{typ: BULK, bulk: val}
 }
 
-func set(v *Value, state *AppState) *Value {
+func set(c *Client, v *Value, state *AppState) *Value {
 	args := v.array[1:]
 	if len(args) != 2 {
 		return &Value{typ: ERROR, err: "ERR invalid number of arguments for 'SET' function"}
@@ -88,7 +105,7 @@ func set(v *Value, state *AppState) *Value {
 	return &Value{typ: STRING, str: "OK"}
 }
 
-func del(v *Value, state *AppState) *Value {
+func del(c *Client, v *Value, state *AppState) *Value {
 	args := v.array[1:]
 	var n int
 
@@ -105,7 +122,7 @@ func del(v *Value, state *AppState) *Value {
 	return &Value{typ: INTEGER, num: n}
 }
 
-func exists(v *Value, state *AppState) *Value {
+func exists(c *Client, v *Value, state *AppState) *Value {
 	args := v.array[1:]
 	var n int
 
@@ -121,7 +138,7 @@ func exists(v *Value, state *AppState) *Value {
 	return &Value{typ: INTEGER, num: n}
 }
 
-func keys(v *Value, state *AppState) *Value {
+func keys(c *Client, v *Value, state *AppState) *Value {
 	args := v.array[1:]
 	if len(args) != 1 {
 		return &Value{typ: ERROR, err: "ERR invalid number of arguments for 'KEYS' command"}
@@ -152,25 +169,25 @@ func keys(v *Value, state *AppState) *Value {
 	return &reply
 }
 
-func save(v *Value, state *AppState) *Value {
+func save(c *Client, v *Value, state *AppState) *Value {
 	SaveRDB(state)
 	return &Value{typ: STRING, str: "OK"}
 }
 
-func bgsave(v *Value, state *AppState) *Value {
+func bgsave(c *Client, v *Value, state *AppState) *Value {
 	// uses copy-on-write algorithm can't implement in go cuz of garbage collector
 	if state.bgsaveRunning {
 		return &Value{typ: ERROR, err: "ERR background saving already in progress"}
 	}
 
-	c := make(map[string]string, len(DB.store))
+	cp := make(map[string]string, len(DB.store))
 
 	DB.mu.RLock()
-	maps.Copy(c, DB.store)
+	maps.Copy(cp, DB.store)
 	DB.mu.RUnlock()
 
 	state.bgsaveRunning = true
-	state.dbCopy = c
+	state.dbCopy = cp
 
 	go func() {
 		defer func() {
@@ -184,7 +201,7 @@ func bgsave(v *Value, state *AppState) *Value {
 	return &Value{typ: STRING, str: "OK"}
 }
 
-func dbsize(v *Value, state *AppState) *Value {
+func dbsize(c *Client, v *Value, state *AppState) *Value {
 	DB.mu.RLock()
 	size := len(DB.store)
 	DB.mu.RUnlock()
@@ -192,10 +209,26 @@ func dbsize(v *Value, state *AppState) *Value {
 	return &Value{typ: INTEGER, num: size}
 }
 
-func flushdb(v *Value, state *AppState) *Value {
+func flushdb(c *Client, v *Value, state *AppState) *Value {
 	DB.mu.Lock()
 	DB.store = map[string]string{}
 	DB.mu.Unlock()
 
 	return &Value{typ: STRING, str: "OK"}
+}
+
+func auth(c *Client, v *Value, state *AppState) *Value {
+	args := v.array[1:]
+	if len(args) != 1 {
+		return &Value{typ: ERROR, err: "ERR invalid number of keywords for 'AUTH'"}
+	}
+
+	p := args[0].bulk
+	if state.conf.password == p {
+		c.authenticated = true
+		return &Value{typ: STRING, str: "OK"}
+	} else {
+		c.authenticated = false
+		return &Value{}
+	}
 }
