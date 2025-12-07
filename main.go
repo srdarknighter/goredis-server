@@ -65,8 +65,10 @@ func handleConn(conn net.Conn, state *AppState) {
 }
 
 type AppState struct { // defines the app state with conf + aof rules
-	conf *Config
-	aof  *Aof
+	conf          *Config
+	aof           *Aof
+	bgsaveRunning bool
+	dbCopy        map[string]string
 }
 
 func NewAppState(conf *Config) *AppState {

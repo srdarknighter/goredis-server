@@ -52,15 +52,25 @@ func IncrRDBTrackers() {
 
 func SaveRDB(state *AppState) {
 	fp := path.Join(state.conf.dir, state.conf.rdbFn)
-	f, err := os.OpenFile(fp, os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.Open(fp)
 	if err != nil {
 		fmt.Println("error opening rdb file: ", err)
+		f.Close()
 		return
 	}
 
 	defer f.Close()
 
-	err = gob.NewEncoder(f).Encode(&DB.store)
+	if state.bgsaveRunning {
+		err = gob.NewEncoder(f).Encode(&state.dbCopy)
+	} else {
+		DB.mu.RLock()
+		err = gob.NewEncoder(f).Encode(&DB.store) // since we lock the file here for writers, other clients can't put data into it, better to use 'BGSAVE'
+		DB.mu.RUnlock()
+	}
+
+	// Initial design
+
 	if err != nil {
 		fmt.Println("error saving rdb file: ", err)
 		return

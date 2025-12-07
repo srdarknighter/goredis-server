@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"maps"
 	"net"
 	"path/filepath"
 )
@@ -16,6 +17,8 @@ var Handlers = map[string]Handler{
 	"DEL":     del,
 	"EXISTS":  exists,
 	"KEYS":    keys,
+	"SAVE":    save,
+	"BGSAVE":  bgsave,
 } // map to store the commands and their implementations
 
 func handle(conn net.Conn, v *Value, state *AppState) {
@@ -145,4 +148,35 @@ func keys(v *Value, state *AppState) *Value {
 		reply.array = append(reply.array, Value{typ: BULK, bulk: m})
 	}
 	return &reply
+}
+
+func save(v *Value, state *AppState) *Value {
+	SaveRDB(state)
+	return &Value{typ: STRING, str: "OK"}
+}
+
+func bgsave(v *Value, state *AppState) *Value { // uses copy-on-write algorithm can't implement in go cuz of garbage collector
+	if state.bgsaveRunning {
+		return &Value{typ: ERROR, err: "ERR background saving already in progress"}
+	}
+
+	c := make(map[string]string, len(DB.store))
+
+	DB.mu.RLock()
+	maps.Copy(c, DB.store)
+	DB.mu.RUnlock()
+
+	state.bgsaveRunning = true
+	state.dbCopy = c
+
+	go func() {
+		defer func() {
+			state.bgsaveRunning = false
+			state.dbCopy = nil
+		}()
+
+		SaveRDB(state)
+	}()
+
+	return &Value{typ: STRING, str: "OK"}
 }
