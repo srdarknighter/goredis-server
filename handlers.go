@@ -19,6 +19,8 @@ var Handlers = map[string]Handler{
 	"KEYS":    keys,
 	"SAVE":    save,
 	"BGSAVE":  bgsave,
+	"DBSIZE":  dbsize,
+	"FLUSHDB": flushdb,
 } // map to store the commands and their implementations
 
 func handle(conn net.Conn, v *Value, state *AppState) {
@@ -155,7 +157,8 @@ func save(v *Value, state *AppState) *Value {
 	return &Value{typ: STRING, str: "OK"}
 }
 
-func bgsave(v *Value, state *AppState) *Value { // uses copy-on-write algorithm can't implement in go cuz of garbage collector
+func bgsave(v *Value, state *AppState) *Value {
+	// uses copy-on-write algorithm can't implement in go cuz of garbage collector
 	if state.bgsaveRunning {
 		return &Value{typ: ERROR, err: "ERR background saving already in progress"}
 	}
@@ -177,6 +180,22 @@ func bgsave(v *Value, state *AppState) *Value { // uses copy-on-write algorithm 
 
 		SaveRDB(state)
 	}()
+
+	return &Value{typ: STRING, str: "OK"}
+}
+
+func dbsize(v *Value, state *AppState) *Value {
+	DB.mu.RLock()
+	size := len(DB.store)
+	DB.mu.RUnlock()
+
+	return &Value{typ: INTEGER, num: size}
+}
+
+func flushdb(v *Value, state *AppState) *Value {
+	DB.mu.Lock()
+	DB.store = map[string]string{}
+	DB.mu.Unlock()
 
 	return &Value{typ: STRING, str: "OK"}
 }
