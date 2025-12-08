@@ -105,7 +105,11 @@ func set(c *Client, v *Value, state *AppState) *Value {
 	val := args[1].bulk
 
 	DB.mu.Lock()
-	DB.Set(key, val)
+	err := DB.Set(key, val, state)
+	if err != nil {
+		DB.mu.Unlock()
+		return &Value{typ: ERROR, err: "Error " + err.Error()}
+	}
 
 	if state.conf.aofEnabled {
 		state.aof.w.Write(v)
@@ -131,7 +135,7 @@ func del(c *Client, v *Value, state *AppState) *Value {
 	DB.mu.Lock()
 	for _, arg := range args {
 		_, ok := DB.store[arg.bulk]
-		delete(DB.store, arg.bulk)
+		DB.Delete(arg.bulk)
 		if ok {
 			n++
 		}
