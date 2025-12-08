@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const UNIX_TS_EPOCH int64 = -62135596800
+
 func main() {
 	log.Println("reading conf file")
 	conf := readConf("./redis.conf")
@@ -82,7 +84,7 @@ type AppState struct { // defines the app state with conf + aof rules
 	conf          *Config
 	aof           *Aof
 	bgsaveRunning bool
-	dbCopy        map[string]string
+	dbCopy        map[string]*Key
 }
 
 func NewAppState(conf *Config) *AppState {
