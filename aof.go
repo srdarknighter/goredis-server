@@ -81,7 +81,8 @@ func (aof *Aof) Rewrite(cp map[string]*Key) {
 	}
 	fwriter.Flush()
 
+	buf.WriteTo(aof.f)
 	// reroute AOF future records to file
-	aof.w = NewWriter(aof.f)
 
+	aof.w = NewWriter(aof.f)
 }

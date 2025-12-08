@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"maps"
 	"path/filepath"
@@ -26,6 +25,9 @@ var Handlers = map[string]Handler{
 	"EXPIRE":       expire,
 	"TTL":          ttl,
 	"BGREWRITEAOF": bgrewriteaof,
+	"MULTI":        multi,
+	"EXEC":         _exec,
+	"DISCARD":      discard,
 } // map to store the commands and their implementations
 
 var SafeCmds = []string{
@@ -50,8 +52,12 @@ func handle(c *Client, v *Value, state *AppState) {
 		return
 	}
 
-	if !ok {
-		fmt.Println("invalid command: ", cmd)
+	//queue the command if in a transaction
+	if state.tx != nil && cmd != "EXEC" && cmd != "DISCARD" {
+		txcmd := TxCommand{v: v, handler: handler}
+		state.tx.cmds = append(state.tx.cmds, &txcmd)
+		w.Write(&Value{typ: STRING, str: "QUEUED"})
+		w.Flush()
 		return
 	}
 
@@ -311,4 +317,39 @@ func bgrewriteaof(c *Client, v *Value, state *AppState) *Value {
 	}()
 
 	return &Value{typ: STRING, str: "Background AOF rewriting started"}
+}
+
+func multi(c *Client, v *Value, state *AppState) *Value {
+	if state.tx != nil {
+		return &Value{typ: ERROR, err: "ERR nested multi-bulk transactions are not allowed"}
+	}
+
+	state.tx = NewTransaction()
+	return &Value{typ: STRING, str: "OK"}
+}
+
+func _exec(c *Client, v *Value, state *AppState) *Value {
+	if state.tx == nil {
+		return &Value{typ: ERROR, err: "ERR EXEC without MULTI"}
+	}
+
+	replies := make([]Value, len(state.tx.cmds))
+
+	for i, cmd := range state.tx.cmds {
+		reply := cmd.handler(c, cmd.v, state)
+		replies[i] = *reply
+	}
+
+	reply := Value{typ: ARRAY, array: replies}
+	state.tx = nil
+	return &reply
+}
+
+func discard(c *Client, v *Value, state *AppState) *Value {
+	if state.tx == nil {
+		return &Value{typ: ERROR, err: "ERR DISCARD without MULTI"}
+	}
+
+	state.tx = nil
+	return &Value{typ: STRING, str: "OK"}
 }
