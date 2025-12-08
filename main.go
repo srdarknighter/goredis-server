@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const UNIX_TS_EPOCH int64 = -62135596800
+const UNIX_TS_EPOCH int64 = -62135596800 // this is the unix timestamp of 1970-01-01 00:00:00 UTC, used to check if a key has expired
 
 func main() {
 	log.Println("reading conf file")
