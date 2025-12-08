@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -14,7 +15,8 @@ type Aof struct {
 	conf *Config
 }
 
-func NewAof(conf *Config) *Aof { // function to initialize aof rules
+func NewAof(conf *Config) *Aof {
+	// function to initialize aof rules
 	aof := Aof{conf: conf}
 
 	fp := path.Join(aof.conf.dir, aof.conf.aofFn)
@@ -48,4 +50,38 @@ func (aof *Aof) Sync() {
 		blankClient := Client{}
 		set(&blankClient, &v, blankState)
 	}
+}
+
+// write all set commands to file
+func (aof *Aof) Rewrite(cp map[string]*Key) {
+	// reroute future AOF records to buffer temporarily
+	var buf bytes.Buffer
+	aof.w = NewWriter(&buf)
+
+	// clear the file contents
+	if err := aof.f.Truncate(0); err != nil {
+		log.Println("aof rewrite trunaction failed: ", err)
+		return
+	}
+
+	if _, err := aof.f.Seek(0, 0); err != nil {
+		log.Println("aof rewrite seek failed: ", err)
+		return
+	}
+
+	fwriter := NewWriter(aof.f)
+
+	for k, v := range cp {
+		cmd := Value{typ: BULK, bulk: "SET"}
+		key := Value{typ: BULK, bulk: k}
+		val := Value{typ: BULK, bulk: v.V}
+
+		arr := Value{typ: ARRAY, array: []Value{cmd, key, val}}
+		fwriter.Write(&arr)
+	}
+	fwriter.Flush()
+
+	// reroute AOF future records to file
+	aof.w = NewWriter(aof.f)
+
 }

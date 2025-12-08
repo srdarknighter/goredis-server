@@ -12,19 +12,20 @@ import (
 type Handler func(*Client, *Value, *AppState) *Value // type defn for the map
 
 var Handlers = map[string]Handler{
-	"COMMAND": command,
-	"GET":     get,
-	"SET":     set,
-	"DEL":     del,
-	"EXISTS":  exists,
-	"KEYS":    keys,
-	"SAVE":    save,
-	"BGSAVE":  bgsave,
-	"DBSIZE":  dbsize,
-	"FLUSHDB": flushdb,
-	"AUTH":    auth,
-	"EXPIRE":  expire,
-	"TTL":     ttl,
+	"COMMAND":      command,
+	"GET":          get,
+	"SET":          set,
+	"DEL":          del,
+	"EXISTS":       exists,
+	"KEYS":         keys,
+	"SAVE":         save,
+	"BGSAVE":       bgsave,
+	"DBSIZE":       dbsize,
+	"FLUSHDB":      flushdb,
+	"AUTH":         auth,
+	"EXPIRE":       expire,
+	"TTL":          ttl,
+	"BGREWRITEAOF": bgrewriteaof,
 } // map to store the commands and their implementations
 
 var SafeCmds = []string{
@@ -297,4 +298,17 @@ func ttl(c *Client, v *Value, state *AppState) *Value {
 		return &Value{typ: INTEGER, num: -2}
 	}
 	return &Value{typ: INTEGER, num: expSecs}
+}
+
+func bgrewriteaof(c *Client, v *Value, state *AppState) *Value {
+	go func() {
+		DB.mu.RLock()
+		cp := make(map[string]*Key, len(DB.store))
+		maps.Copy(cp, DB.store)
+		DB.mu.RUnlock()
+
+		state.aof.Rewrite(cp)
+	}()
+
+	return &Value{typ: STRING, str: "Background AOF rewriting started"}
 }
