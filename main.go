@@ -59,6 +59,17 @@ func handleConn(conn net.Conn, state *AppState) {
 	c := NewClient(conn)
 	r := bufio.NewReader(conn)
 
+	// removing client from monitor array
+	defer func() {
+		new := state.monitors[:0]
+		for _, mon := range state.monitors {
+			if mon != c {
+				new = append(new, mon)
+			}
+		}
+		state.monitors = new
+	}()
+
 	for {
 		v := Value{typ: ARRAY}
 		if err := v.readArray(r); err != nil {

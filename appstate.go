@@ -8,6 +8,7 @@ type AppState struct { // defines the app state with conf + aof rules
 	bgsaveRunning bool
 	dbCopy        map[string]*Item
 	tx            *Transaction
+	monitors      []*Client
 }
 
 func NewAppState(conf *Config) *AppState {
