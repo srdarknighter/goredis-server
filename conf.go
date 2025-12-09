@@ -10,16 +10,17 @@ import (
 )
 
 type Config struct {
-	dir         string
-	rdb         []RDBSnapshot
-	rdbFn       string
-	aofEnabled  bool
-	aofFn       string
-	aofFsync    FSyncMode
-	requirepass bool
-	password    string
-	maxmem      int64
-	eviction    Eviction
+	dir           string
+	rdb           []RDBSnapshot
+	rdbFn         string
+	aofEnabled    bool
+	aofFn         string
+	aofFsync      FSyncMode
+	requirepass   bool
+	password      string
+	maxmem        int64
+	eviction      Eviction
+	maxmemSamples int
 }
 
 func NewConfig() *Config {
@@ -42,7 +43,14 @@ const (
 type Eviction string
 
 const (
-	NoEviction Eviction = "noeviction"
+	NoEviction      Eviction = "noeviction"
+	AllKeysRandom   Eviction = "allkeys-random"
+	AllKeysLRU      Eviction = "allkeys-lru"
+	AllKeysLFU      Eviction = "allkeys-lfu"
+	VolatileRandom  Eviction = "volatile-random"
+	VolatileKeysLRU Eviction = "volatile-lru"
+	VolatileKeysLFU Eviction = "volatile-lfu"
+	VolatileTTL     Eviction = "volatile-ttl"
 )
 
 func readConf(fn string) *Config {
@@ -125,6 +133,14 @@ func parseLine(l string, conf *Config) {
 		conf.maxmem = maxmem
 	case "maxmemory-policy":
 		conf.eviction = Eviction(args[1]) // type casting from string type to Eviction type
+	case "maxmemory-samples":
+		memSamples, err := strconv.Atoi(args[1])
+		if err != nil {
+			log.Println("cannot parse maxmemory-samples defaulting to 50. error: ", err)
+			conf.maxmemSamples = 50
+			return
+		}
+		conf.maxmemSamples = memSamples
 	}
 }
 

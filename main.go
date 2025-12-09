@@ -84,7 +84,7 @@ type AppState struct { // defines the app state with conf + aof rules
 	conf          *Config
 	aof           *Aof
 	bgsaveRunning bool
-	dbCopy        map[string]*Key
+	dbCopy        map[string]*Item
 	tx            *Transaction
 }
 

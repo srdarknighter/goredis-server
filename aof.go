@@ -53,7 +53,7 @@ func (aof *Aof) Sync() {
 }
 
 // write all set commands to file
-func (aof *Aof) Rewrite(cp map[string]*Key) {
+func (aof *Aof) Rewrite(cp map[string]*Item) {
 	// reroute future AOF records to buffer temporarily
 	var buf bytes.Buffer
 	aof.w = NewWriter(&buf)

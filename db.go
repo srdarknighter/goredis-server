@@ -8,14 +8,14 @@ import (
 )
 
 type Database struct {
-	store map[string]*Key
+	store map[string]*Item
 	mu    sync.RWMutex
 	mem   int64
 }
 
 func NewDatabase() *Database {
 	return &Database{
-		store: map[string]*Key{},
+		store: map[string]*Item{},
 		mu:    sync.RWMutex{},
 	}
 }
@@ -24,7 +24,68 @@ func (db *Database) evictKeys(state *AppState, requiredMem int64) error {
 	if state.conf.eviction == NoEviction {
 		return errors.New("memory limit reached")
 	}
+
+	samples := sampleKeys(state)
+
+	enoughMemFreed := func() bool {
+		if db.mem+requiredMem <= state.conf.maxmem {
+			return true
+		} else {
+			return false
+		}
+	}
+
+	evictUntilMemFreed := func(samples []sample) bool {
+		for _, s := range samples {
+			log.Println("evicting: ", s.k)
+			db.Delete(s.k)
+			if enoughMemFreed() {
+				break
+			}
+		}
+		return false
+	}
+
+	switch state.conf.eviction {
+	case AllKeysRandom:
+		evictUntilMemFreed(samples)
+	}
 	return nil
+}
+
+func (i *Item) shouldExpire() bool {
+	return (i.exp.Unix() != UNIX_TS_EPOCH && time.Until(i.exp).Seconds() <= 0)
+}
+
+func (db *Database) tryExpire(k string, i *Item) bool {
+	if i.shouldExpire() {
+		DB.mu.Lock()
+		DB.Delete(k)
+		DB.mu.Unlock()
+		return true
+	}
+
+	return false
+}
+
+func (db *Database) Get(k string) (i *Item, ok bool) {
+	db.mu.RLock()
+	item, ok := db.store[k]
+	if !ok {
+		return item, ok
+	}
+
+	expired := db.tryExpire(k, item)
+	if expired {
+		return &Item{}, false
+	}
+	item.Accesses++
+	item.LastAccess = time.Now()
+	db.mu.RUnlock()
+
+	log.Printf("item %s accessed %d times at: %v", k, item.Accesses, item.LastAccess)
+
+	return item, ok
 }
 
 func (db *Database) Set(k string, v string, state *AppState) error {
@@ -33,7 +94,7 @@ func (db *Database) Set(k string, v string, state *AppState) error {
 		db.mem -= oldmem
 	}
 
-	key := &Key{V: v}
+	key := &Item{V: v}
 	kmem := key.approxMemUsage(k)
 
 	outOfMem := state.conf.maxmem > 0 && db.mem+kmem > state.conf.maxmem
@@ -63,13 +124,14 @@ func (db *Database) Delete(k string) {
 
 var DB = NewDatabase()
 
-type Key struct {
-	V   string
-	exp time.Time
+type Item struct {
+	V          string
+	exp        time.Time
+	LastAccess time.Time
+	Accesses   int
 }
 
-// why should we bind here on *Key?
-func (k *Key) approxMemUsage(name string) int64 {
+func (k *Item) approxMemUsage(name string) int64 {
 	stringHeader := 16
 	expHeader := 24
 	mapEntrySize := 32

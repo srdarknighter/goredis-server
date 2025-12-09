@@ -78,22 +78,12 @@ func get(c *Client, v *Value, state *AppState) *Value {
 
 	name := args[0].bulk
 
-	DB.mu.RLock()
-	val, ok := DB.store[name]
-	DB.mu.RUnlock()
-
+	item, ok := DB.Get(name)
 	if !ok {
 		return &Value{typ: NULL}
 	}
 
-	if val.exp.Unix() != UNIX_TS_EPOCH && time.Until(val.exp).Seconds() <= 0 {
-		DB.mu.Lock()
-		DB.Delete(name)
-		DB.mu.Unlock()
-		return &Value{typ: NULL}
-	}
-
-	return &Value{typ: BULK, bulk: val.V}
+	return &Value{typ: BULK, bulk: item.V}
 }
 
 func set(c *Client, v *Value, state *AppState) *Value {
@@ -203,7 +193,7 @@ func bgsave(c *Client, v *Value, state *AppState) *Value {
 		return &Value{typ: ERROR, err: "ERR background saving already in progress"}
 	}
 
-	cp := make(map[string]*Key, len(DB.store))
+	cp := make(map[string]*Item, len(DB.store))
 
 	DB.mu.RLock()
 	maps.Copy(cp, DB.store)
@@ -234,7 +224,7 @@ func dbsize(c *Client, v *Value, state *AppState) *Value {
 
 func flushdb(c *Client, v *Value, state *AppState) *Value {
 	DB.mu.Lock()
-	DB.store = map[string]*Key{}
+	DB.store = map[string]*Item{}
 	DB.mu.Unlock()
 
 	return &Value{typ: STRING, str: "OK"}
@@ -313,7 +303,7 @@ func ttl(c *Client, v *Value, state *AppState) *Value {
 func bgrewriteaof(c *Client, v *Value, state *AppState) *Value {
 	go func() {
 		DB.mu.RLock()
-		cp := make(map[string]*Key, len(DB.store))
+		cp := make(map[string]*Item, len(DB.store))
 		maps.Copy(cp, DB.store)
 		DB.mu.RUnlock()
 
