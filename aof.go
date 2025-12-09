@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -34,9 +35,10 @@ func NewAof(conf *Config) *Aof {
 }
 
 func (aof *Aof) Sync() {
+	r := bufio.NewReader(aof.f)
 	for {
 		v := Value{}
-		err := v.readArray(aof.f)
+		err := v.readArray(r)
 		if err == io.EOF {
 			break
 		}
@@ -81,7 +83,9 @@ func (aof *Aof) Rewrite(cp map[string]*Item) {
 	}
 	fwriter.Flush()
 
-	buf.WriteTo(aof.f)
+	if _, err := buf.WriteTo(aof.f); err != nil {
+		log.Println("aof - cannot write to file: ", err)
+	}
 	// reroute AOF future records to file
 
 	aof.w = NewWriter(aof.f)

@@ -38,9 +38,11 @@ func readLine(r *bufio.Reader) (string, error) {
 	return strings.Trim(line, "\r\n"), nil
 }
 
-func (v *Value) readArray(reader io.Reader) error {
-	r := bufio.NewReader(reader)
+// changing this up since we are only reading one key in aof file sync
+// since we are reading one array at a time and instantiating a new bufio reader for every array
+// we loose continuity in the file
 
+func (v *Value) readArray(r *bufio.Reader) error {
 	line, err := readLine(r)
 	if err != nil {
 		return err
