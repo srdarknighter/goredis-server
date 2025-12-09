@@ -64,10 +64,6 @@ func (db *Database) evictKeys(state *AppState, requiredMem int64) error {
 	return nil
 }
 
-func (i *Item) shouldExpire() bool {
-	return (i.exp.Unix() != UNIX_TS_EPOCH && time.Until(i.exp).Seconds() <= 0)
-}
-
 func (db *Database) tryExpire(k string, i *Item) bool {
 	if i.shouldExpire() {
 		DB.mu.Lock()
@@ -83,11 +79,13 @@ func (db *Database) Get(k string) (i *Item, ok bool) {
 	db.mu.RLock()
 	item, ok := db.store[k]
 	if !ok {
+		db.mu.RUnlock()
 		return item, ok
 	}
 
 	expired := db.tryExpire(k, item)
 	if expired {
+		db.mu.RUnlock()
 		return &Item{}, false
 	}
 	item.Accesses++
@@ -134,31 +132,3 @@ func (db *Database) Delete(k string) {
 }
 
 var DB = NewDatabase()
-
-type Item struct {
-	V          string
-	exp        time.Time
-	LastAccess time.Time
-	Accesses   int
-}
-
-func (k *Item) approxMemUsage(name string) int64 {
-	stringHeader := 16
-	expHeader := 24
-	mapEntrySize := 32
-
-	return int64(stringHeader + len(name) + stringHeader + len(k.V) + expHeader + mapEntrySize)
-}
-
-type Transaction struct {
-	cmds []*TxCommand
-}
-
-func NewTransaction() *Transaction {
-	return &Transaction{}
-}
-
-type TxCommand struct {
-	v       *Value
-	handler Handler
-}

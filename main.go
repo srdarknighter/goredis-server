@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"sync"
-	"time"
 )
 
 const UNIX_TS_EPOCH int64 = -62135596800 // this is the unix timestamp of 1970-01-01 00:00:00 UTC, used to check if a key has expired
@@ -69,46 +68,4 @@ func handleConn(conn net.Conn, state *AppState) {
 		handle(c, &v, state)
 	}
 	log.Println("connection closed: ", conn.LocalAddr().String())
-}
-
-type Client struct {
-	conn          net.Conn
-	authenticated bool
-}
-
-func NewClient(conn net.Conn) *Client {
-	return &Client{
-		conn: conn,
-	}
-}
-
-type AppState struct { // defines the app state with conf + aof rules
-	conf          *Config
-	aof           *Aof
-	bgsaveRunning bool
-	dbCopy        map[string]*Item
-	tx            *Transaction
-}
-
-func NewAppState(conf *Config) *AppState {
-	state := AppState{
-		conf: conf,
-	}
-
-	if conf.aofEnabled {
-		state.aof = NewAof(conf)
-
-		if conf.aofFsync == EverySec {
-			go func() {
-				t := time.NewTicker(time.Second)
-				defer t.Stop()
-
-				for range t.C {
-					state.aof.w.Flush()
-				}
-			}()
-		}
-	}
-
-	return &state
 }
