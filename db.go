@@ -36,46 +36,52 @@ func (db *Database) evictKeys(state *AppState, requiredMem int64) error {
 		}
 	}
 
-	evictUntilMemFreed := func(samples []sample) bool {
+	evictUntilMemFreed := func(samples []sample) int {
+		var n int
 		for _, s := range samples {
 			log.Println("evicting: ", s.k)
 			db.Delete(s.k)
+			n++
 			if enoughMemFreed() {
 				break
 			}
 		}
-		return false
+		return n
 	}
 
 	switch state.conf.eviction {
 	case AllKeysRandom:
-		evictUntilMemFreed(samples)
+		evictionKeys := evictUntilMemFreed(samples)
+		state.generalStats.evicted_keys += evictionKeys
 	case AllKeysLRU:
 		sort.Slice(samples, func(i int, j int) bool {
 			return samples[i].v.LastAccess.After(samples[j].v.LastAccess)
 		})
-		evictUntilMemFreed(samples)
+		evictionKeys := evictUntilMemFreed(samples)
+		state.generalStats.evicted_keys += evictionKeys
 	case AllKeysLFU:
 		sort.Slice(samples, func(i int, j int) bool {
 			return samples[i].v.Accesses < samples[j].v.Accesses
 		})
-		evictUntilMemFreed(samples)
+		evictionKeys := evictUntilMemFreed(samples)
+		state.generalStats.evicted_keys += evictionKeys
 	}
 	return nil
 }
 
-func (db *Database) tryExpire(k string, i *Item) bool {
+func (db *Database) tryExpire(k string, i *Item, state *AppState) bool {
 	if i.shouldExpire() {
 		DB.mu.Lock()
 		DB.Delete(k)
 		DB.mu.Unlock()
+		state.generalStats.expired_keys++
 		return true
 	}
 
 	return false
 }
 
-func (db *Database) Get(k string) (i *Item, ok bool) {
+func (db *Database) Get(k string, state *AppState) (i *Item, ok bool) {
 	db.mu.RLock()
 	item, ok := db.store[k]
 	if !ok {
@@ -83,7 +89,7 @@ func (db *Database) Get(k string) (i *Item, ok bool) {
 		return item, ok
 	}
 
-	expired := db.tryExpire(k, item)
+	expired := db.tryExpire(k, item, state)
 	if expired {
 		db.mu.RUnlock()
 		return &Item{}, false
@@ -117,6 +123,11 @@ func (db *Database) Set(k string, v string, state *AppState) error {
 	db.store[k] = key
 	db.mem += kmem
 	log.Println("memory: ", db.mem)
+
+	if db.mem > state.peakMem {
+		state.peakMem = db.mem
+	}
+
 	return nil
 }
 

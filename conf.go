@@ -21,6 +21,7 @@ type Config struct {
 	maxmem        int64
 	eviction      Eviction
 	maxmemSamples int
+	config_fp     string
 }
 
 func NewConfig() *Config {
@@ -64,6 +65,8 @@ func readConf(fn string) *Config {
 	}
 
 	defer f.Close()
+
+	conf.config_fp = fn
 
 	s := bufio.NewScanner(f)
 
