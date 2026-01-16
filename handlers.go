@@ -29,6 +29,7 @@ var Handlers = map[string]Handler{
 	"EXEC":         _exec,
 	"DISCARD":      discard,
 	"MONITOR":      monitor,
+	"INFO":         info,
 } // map to store the commands and their implementations
 
 var SafeCmds = []string{
