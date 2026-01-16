@@ -295,7 +295,7 @@ func ttl(c *Client, v *Value, state *AppState) *Value {
 	if !ok {
 		return &Value{typ: INTEGER, num: -2}
 	}
-	exp := key.exp
+	exp := item.exp
 	DB.mu.RUnlock()
 
 	if exp.Unix() == UNIX_TS_EPOCH {
